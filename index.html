@@ -3,74 +3,76 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Graph Visualizer</title>
+    <title>Enhanced Graph Visualizer</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jsPlumb/2.15.6/js/jsplumb.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
     <style>
-        body {
-            font-family: Arial, sans-serif;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            height: 100vh;
-            margin: 0;
-            background-color: #f0f0f0;
-        }
-        #graph-container {
-            width: 600px;
-            height: 400px;
-            border: 1px solid #ccc;
-            position: relative;
-            background-color: white;
-        }
         .node {
-            width: 30px;
-            height: 30px;
+            width: 40px;
+            height: 40px;
             border-radius: 50%;
-            background-color: #3498db;
-            color: white;
             display: flex;
             justify-content: center;
             align-items: center;
             position: absolute;
             cursor: move;
+            transition: all 0.3s ease;
         }
-        #controls {
-            margin-top: 20px;
+        .node:hover {
+            transform: scale(1.1);
         }
-        input, button {
-            margin: 5px;
-            padding: 5px;
+        #graph-container {
+            background-image: radial-gradient(#e5e7eb 1px, transparent 1px);
+            background-size: 20px 20px;
         }
     </style>
 </head>
-<body>
-    <div>
-        <div id="graph-container"></div>
-        <div id="controls">
-            <input type="text" id="node-input" placeholder="Enter node name">
-            <button onclick="addNode()">Add Node</button>
-            <input type="text" id="edge-input" placeholder="node1,node2">
-            <button onclick="addEdge()">Add Edge</button>
+<body class="bg-gray-100 min-h-screen">
+    <div class="container mx-auto p-4">
+        <h1 class="text-3xl font-bold mb-4 text-center text-gray-800">Enhanced Graph Visualizer</h1>
+        <div class="bg-white rounded-lg shadow-lg p-6">
+            <div id="graph-container" class="w-full h-[500px] border border-gray-300 rounded-lg mb-4 relative"></div>
+            <div class="grid grid-cols-2 gap-4">
+                <div>
+                    <input type="text" id="node-input" placeholder="Enter node name" class="w-full p-2 border border-gray-300 rounded">
+                    <button onclick="addNode()" class="mt-2 bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600 transition">Add Node</button>
+                </div>
+                <div>
+                    <input type="text" id="edge-input" placeholder="node1,node2" class="w-full p-2 border border-gray-300 rounded">
+                    <button onclick="addEdge()" class="mt-2 bg-green-500 text-white px-4 py-2 rounded hover:bg-green-600 transition">Add Edge</button>
+                </div>
+            </div>
+            <div class="mt-4">
+                <button onclick="clearGraph()" class="bg-red-500 text-white px-4 py-2 rounded hover:bg-red-600 transition">Clear Graph</button>
+                <button onclick="saveGraph()" class="ml-2 bg-purple-500 text-white px-4 py-2 rounded hover:bg-purple-600 transition">Save Graph</button>
+                <button onclick="loadGraph()" class="ml-2 bg-yellow-500 text-white px-4 py-2 rounded hover:bg-yellow-600 transition">Load Graph</button>
+            </div>
+            <div id="error-message" class="mt-4 text-red-500"></div>
         </div>
     </div>
 
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jsPlumb/2.15.6/js/jsplumb.min.js"></script>
     <script>
         const graphContainer = document.getElementById('graph-container');
         const nodeInput = document.getElementById('node-input');
         const edgeInput = document.getElementById('edge-input');
+        const errorMessage = document.getElementById('error-message');
         const jsPlumbInstance = jsPlumb.getInstance();
 
         jsPlumbInstance.setContainer(graphContainer);
+
+        const colors = ['#3498db', '#e74c3c', '#2ecc71', '#f39c12', '#9b59b6', '#1abc9c', '#34495e', '#e67e22'];
+        let colorIndex = 0;
 
         function addNode() {
             const nodeName = nodeInput.value.trim();
             if (nodeName && !document.getElementById(nodeName)) {
                 const node = document.createElement('div');
                 node.id = nodeName;
-                node.className = 'node';
+                node.className = 'node text-white font-bold';
                 node.textContent = nodeName;
-                node.style.left = Math.random() * (graphContainer.clientWidth - 30) + 'px';
-                node.style.top = Math.random() * (graphContainer.clientHeight - 30) + 'px';
+                node.style.backgroundColor = colors[colorIndex % colors.length];
+                node.style.left = Math.random() * (graphContainer.clientWidth - 40) + 'px';
+                node.style.top = Math.random() * (graphContainer.clientHeight - 40) + 'px';
                 graphContainer.appendChild(node);
 
                 jsPlumbInstance.draggable(node);
@@ -84,18 +86,103 @@
                 });
 
                 nodeInput.value = '';
+                errorMessage.textContent = '';
+                colorIndex++;
+            } else if (document.getElementById(nodeName)) {
+                errorMessage.textContent = `Node "${nodeName}" already exists.`;
+            } else {
+                errorMessage.textContent = 'Please enter a valid node name.';
             }
         }
 
         function addEdge() {
             const [source, target] = edgeInput.value.split(',').map(s => s.trim());
             if (source && target) {
-                jsPlumbInstance.connect({
-                    source: source,
-                    target: target,
-                    type: "basic"
+                const sourceNode = document.getElementById(source);
+                const targetNode = document.getElementById(target);
+                
+                if (!sourceNode) {
+                    errorMessage.textContent = `Source node "${source}" does not exist.`;
+                } else if (!targetNode) {
+                    errorMessage.textContent = `Target node "${target}" does not exist.`;
+                } else {
+                    jsPlumbInstance.connect({
+                        source: sourceNode,
+                        target: targetNode,
+                        type: "basic",
+                        paintStyle: { stroke: "#5c6bc0", strokeWidth: 2 },
+                        endpointStyle: { fill: "#5c6bc0", outlineStroke: "transparent", outlineWidth: 0 },
+                        hoverPaintStyle: { stroke: "#ff6d00", strokeWidth: 3 },
+                    });
+                    edgeInput.value = '';
+                    errorMessage.textContent = '';
+                }
+            } else {
+                errorMessage.textContent = 'Please enter both source and target nodes.';
+            }
+        }
+
+        function clearGraph() {
+            jsPlumbInstance.deleteEveryEndpoint();
+            graphContainer.innerHTML = '';
+            errorMessage.textContent = '';
+            colorIndex = 0;
+        }
+
+        function saveGraph() {
+            const nodes = Array.from(graphContainer.querySelectorAll('.node')).map(node => ({
+                id: node.id,
+                left: node.style.left,
+                top: node.style.top,
+                color: node.style.backgroundColor
+            }));
+            const connections = jsPlumbInstance.getAllConnections().map(conn => ({
+                source: conn.source.id,
+                target: conn.target.id
+            }));
+            const graphData = JSON.stringify({ nodes, connections });
+            localStorage.setItem('savedGraph', graphData);
+            alert('Graph saved successfully!');
+        }
+
+        function loadGraph() {
+            const savedGraph = localStorage.getItem('savedGraph');
+            if (savedGraph) {
+                clearGraph();
+                const { nodes, connections } = JSON.parse(savedGraph);
+                nodes.forEach(node => {
+                    const newNode = document.createElement('div');
+                    newNode.id = node.id;
+                    newNode.className = 'node text-white font-bold';
+                    newNode.textContent = node.id;
+                    newNode.style.backgroundColor = node.color;
+                    newNode.style.left = node.left;
+                    newNode.style.top = node.top;
+                    graphContainer.appendChild(newNode);
+
+                    jsPlumbInstance.draggable(newNode);
+                    jsPlumbInstance.makeSource(newNode, {
+                        connectorStyle: { stroke: "#5c6bc0", strokeWidth: 2 },
+                        connectionType: "basic",
+                        anchor: "Continuous"
+                    });
+                    jsPlumbInstance.makeTarget(newNode, {
+                        anchor: "Continuous"
+                    });
                 });
-                edgeInput.value = '';
+                connections.forEach(conn => {
+                    jsPlumbInstance.connect({
+                        source: document.getElementById(conn.source),
+                        target: document.getElementById(conn.target),
+                        type: "basic",
+                        paintStyle: { stroke: "#5c6bc0", strokeWidth: 2 },
+                        endpointStyle: { fill: "#5c6bc0", outlineStroke: "transparent", outlineWidth: 0 },
+                        hoverPaintStyle: { stroke: "#ff6d00", strokeWidth: 3 },
+                    });
+                });
+                alert('Graph loaded successfully!');
+            } else {
+                alert('No saved graph found!');
             }
         }
     </script>
