@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Graph Visualizer</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            background-color: #f0f0f0;
+        }
+        #graph-container {
+            width: 600px;
+            height: 400px;
+            border: 1px solid #ccc;
+            position: relative;
+            background-color: white;
+        }
+        .node {
+            width: 30px;
+            height: 30px;
+            border-radius: 50%;
+            background-color: #3498db;
+            color: white;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            position: absolute;
+            cursor: move;
+        }
+        #controls {
+            margin-top: 20px;
+        }
+        input, button {
+            margin: 5px;
+            padding: 5px;
+        }
+    </style>
+</head>
+<body>
+    <div>
+        <div id="graph-container"></div>
+        <div id="controls">
+            <input type="text" id="node-input" placeholder="Enter node name">
+            <button onclick="addNode()">Add Node</button>
+            <input type="text" id="edge-input" placeholder="node1,node2">
+            <button onclick="addEdge()">Add Edge</button>
+        </div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jsPlumb/2.15.6/js/jsplumb.min.js"></script>
+    <script>
+        const graphContainer = document.getElementById('graph-container');
+        const nodeInput = document.getElementById('node-input');
+        const edgeInput = document.getElementById('edge-input');
+        const jsPlumbInstance = jsPlumb.getInstance();
+
+        jsPlumbInstance.setContainer(graphContainer);
+
+        function addNode() {
+            const nodeName = nodeInput.value.trim();
+            if (nodeName && !document.getElementById(nodeName)) {
+                const node = document.createElement('div');
+                node.id = nodeName;
+                node.className = 'node';
+                node.textContent = nodeName;
+                node.style.left = Math.random() * (graphContainer.clientWidth - 30) + 'px';
+                node.style.top = Math.random() * (graphContainer.clientHeight - 30) + 'px';
+                graphContainer.appendChild(node);
+
+                jsPlumbInstance.draggable(node);
+                jsPlumbInstance.makeSource(node, {
+                    connectorStyle: { stroke: "#5c6bc0", strokeWidth: 2 },
+                    connectionType: "basic",
+                    anchor: "Continuous"
+                });
+                jsPlumbInstance.makeTarget(node, {
+                    anchor: "Continuous"
+                });
+
+                nodeInput.value = '';
+            }
+        }
+
+        function addEdge() {
+            const [source, target] = edgeInput.value.split(',').map(s => s.trim());
+            if (source && target) {
+                jsPlumbInstance.connect({
+                    source: source,
+                    target: target,
+                    type: "basic"
+                });
+                edgeInput.value = '';
+            }
+        }
+    </script>
+</body>
+</html>
