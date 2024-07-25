@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Enhanced Graph Visualizer</title>
+    <title>Advanced Graph Visualizer</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jsPlumb/2.15.6/js/jsplumb.min.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
@@ -25,29 +25,54 @@
             background-image: radial-gradient(#e5e7eb 1px, transparent 1px);
             background-size: 20px 20px;
         }
+        .delete-node {
+            position: absolute;
+            top: -5px;
+            right: -5px;
+            background-color: red;
+            color: white;
+            border-radius: 50%;
+            width: 15px;
+            height: 15px;
+            font-size: 10px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            cursor: pointer;
+        }
     </style>
 </head>
 <body class="bg-gray-100 min-h-screen">
     <div class="container mx-auto p-4">
-        <h1 class="text-3xl font-bold mb-4 text-center text-gray-800">Enhanced Graph Visualizer</h1>
+        <h1 class="text-3xl font-bold mb-4 text-center text-gray-800">Advanced Graph Visualizer</h1>
         <div class="bg-white rounded-lg shadow-lg p-6">
             <div id="graph-container" class="w-full h-[500px] border border-gray-300 rounded-lg mb-4 relative"></div>
-            <div class="grid grid-cols-2 gap-4">
+            <div class="grid grid-cols-2 gap-4 mb-4">
                 <div>
                     <input type="text" id="node-input" placeholder="Enter node name" class="w-full p-2 border border-gray-300 rounded">
                     <button onclick="addNode()" class="mt-2 bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600 transition">Add Node</button>
                 </div>
                 <div>
-                    <input type="text" id="edge-input" placeholder="node1,node2" class="w-full p-2 border border-gray-300 rounded">
+                    <input type="text" id="edge-input" placeholder="source,target,weight" class="w-full p-2 border border-gray-300 rounded">
                     <button onclick="addEdge()" class="mt-2 bg-green-500 text-white px-4 py-2 rounded hover:bg-green-600 transition">Add Edge</button>
+                </div>
+            </div>
+            <div class="grid grid-cols-2 gap-4 mb-4">
+                <div>
+                    <input type="text" id="dfs-start" placeholder="Start node for DFS" class="w-full p-2 border border-gray-300 rounded">
+                    <button onclick="runDFS()" class="mt-2 bg-purple-500 text-white px-4 py-2 rounded hover:bg-purple-600 transition">Run DFS</button>
+                </div>
+                <div>
+                    <button onclick="toggleDirected()" id="directed-toggle" class="mt-2 bg-yellow-500 text-white px-4 py-2 rounded hover:bg-yellow-600 transition">Toggle Directed Edges</button>
                 </div>
             </div>
             <div class="mt-4">
                 <button onclick="clearGraph()" class="bg-red-500 text-white px-4 py-2 rounded hover:bg-red-600 transition">Clear Graph</button>
-                <button onclick="saveGraph()" class="ml-2 bg-purple-500 text-white px-4 py-2 rounded hover:bg-purple-600 transition">Save Graph</button>
-                <button onclick="loadGraph()" class="ml-2 bg-yellow-500 text-white px-4 py-2 rounded hover:bg-yellow-600 transition">Load Graph</button>
+                <button onclick="saveGraph()" class="ml-2 bg-indigo-500 text-white px-4 py-2 rounded hover:bg-indigo-600 transition">Save Graph</button>
+                <button onclick="loadGraph()" class="ml-2 bg-pink-500 text-white px-4 py-2 rounded hover:bg-pink-600 transition">Load Graph</button>
             </div>
             <div id="error-message" class="mt-4 text-red-500"></div>
+            <div id="dfs-result" class="mt-4 text-green-600"></div>
         </div>
     </div>
 
@@ -56,12 +81,14 @@
         const nodeInput = document.getElementById('node-input');
         const edgeInput = document.getElementById('edge-input');
         const errorMessage = document.getElementById('error-message');
+        const dfsResult = document.getElementById('dfs-result');
         const jsPlumbInstance = jsPlumb.getInstance();
 
         jsPlumbInstance.setContainer(graphContainer);
 
         const colors = ['#3498db', '#e74c3c', '#2ecc71', '#f39c12', '#9b59b6', '#1abc9c', '#34495e', '#e67e22'];
         let colorIndex = 0;
+        let isDirected = false;
 
         function addNode() {
             const nodeName = nodeInput.value.trim();
@@ -73,6 +100,13 @@
                 node.style.backgroundColor = colors[colorIndex % colors.length];
                 node.style.left = Math.random() * (graphContainer.clientWidth - 40) + 'px';
                 node.style.top = Math.random() * (graphContainer.clientHeight - 40) + 'px';
+                
+                const deleteBtn = document.createElement('div');
+                deleteBtn.className = 'delete-node';
+                deleteBtn.textContent = 'x';
+                deleteBtn.onclick = () => deleteNode(nodeName);
+                node.appendChild(deleteBtn);
+                
                 graphContainer.appendChild(node);
 
                 jsPlumbInstance.draggable(node);
@@ -96,7 +130,7 @@
         }
 
         function addEdge() {
-            const [source, target] = edgeInput.value.split(',').map(s => s.trim());
+            const [source, target, weight] = edgeInput.value.split(',').map(s => s.trim());
             if (source && target) {
                 const sourceNode = document.getElementById(source);
                 const targetNode = document.getElementById(target);
@@ -113,6 +147,10 @@
                         paintStyle: { stroke: "#5c6bc0", strokeWidth: 2 },
                         endpointStyle: { fill: "#5c6bc0", outlineStroke: "transparent", outlineWidth: 0 },
                         hoverPaintStyle: { stroke: "#ff6d00", strokeWidth: 3 },
+                        overlays: [
+                            ["Arrow", { width: 12, length: 12, location: 1 }],
+                            ["Label", { label: weight || "", id: "label", cssClass: "connection-label" }]
+                        ],
                     });
                     edgeInput.value = '';
                     errorMessage.textContent = '';
@@ -122,10 +160,57 @@
             }
         }
 
+        function deleteNode(nodeId) {
+            const node = document.getElementById(nodeId);
+            if (node) {
+                jsPlumbInstance.remove(node);
+            }
+        }
+
+        function toggleDirected() {
+            isDirected = !isDirected;
+            const connections = jsPlumbInstance.getAllConnections();
+            connections.forEach(conn => {
+                if (isDirected) {
+                    conn.addOverlay(["Arrow", { width: 12, length: 12, location: 1 }]);
+                } else {
+                    conn.removeOverlay("Arrow");
+                }
+            });
+            document.getElementById('directed-toggle').textContent = isDirected ? 'Undirected Edges' : 'Directed Edges';
+        }
+
+        function runDFS() {
+            const startNode = document.getElementById('dfs-start').value.trim();
+            if (!startNode || !document.getElementById(startNode)) {
+                errorMessage.textContent = 'Please enter a valid start node for DFS.';
+                return;
+            }
+
+            const visited = new Set();
+            const result = [];
+
+            function dfs(node) {
+                visited.add(node);
+                result.push(node);
+                const connections = jsPlumbInstance.getConnections({ source: node });
+                for (let conn of connections) {
+                    const targetId = conn.target.id;
+                    if (!visited.has(targetId)) {
+                        dfs(targetId);
+                    }
+                }
+            }
+
+            dfs(startNode);
+            dfsResult.textContent = `DFS Result: ${result.join(' -> ')}`;
+        }
+
         function clearGraph() {
             jsPlumbInstance.deleteEveryEndpoint();
             graphContainer.innerHTML = '';
             errorMessage.textContent = '';
+            dfsResult.textContent = '';
             colorIndex = 0;
         }
 
@@ -138,9 +223,10 @@
             }));
             const connections = jsPlumbInstance.getAllConnections().map(conn => ({
                 source: conn.source.id,
-                target: conn.target.id
+                target: conn.target.id,
+                weight: conn.getOverlay("label").getLabel()
             }));
-            const graphData = JSON.stringify({ nodes, connections });
+            const graphData = JSON.stringify({ nodes, connections, isDirected });
             localStorage.setItem('savedGraph', graphData);
             alert('Graph saved successfully!');
         }
@@ -149,7 +235,7 @@
             const savedGraph = localStorage.getItem('savedGraph');
             if (savedGraph) {
                 clearGraph();
-                const { nodes, connections } = JSON.parse(savedGraph);
+                const { nodes, connections, isDirected: savedIsDirected } = JSON.parse(savedGraph);
                 nodes.forEach(node => {
                     const newNode = document.createElement('div');
                     newNode.id = node.id;
@@ -158,6 +244,13 @@
                     newNode.style.backgroundColor = node.color;
                     newNode.style.left = node.left;
                     newNode.style.top = node.top;
+
+                    const deleteBtn = document.createElement('div');
+                    deleteBtn.className = 'delete-node';
+                    deleteBtn.textContent = 'x';
+                    deleteBtn.onclick = () => deleteNode(node.id);
+                    newNode.appendChild(deleteBtn);
+
                     graphContainer.appendChild(newNode);
 
                     jsPlumbInstance.draggable(newNode);
@@ -178,8 +271,17 @@
                         paintStyle: { stroke: "#5c6bc0", strokeWidth: 2 },
                         endpointStyle: { fill: "#5c6bc0", outlineStroke: "transparent", outlineWidth: 0 },
                         hoverPaintStyle: { stroke: "#ff6d00", strokeWidth: 3 },
+                        overlays: [
+                            ["Arrow", { width: 12, length: 12, location: 1 }],
+                            ["Label", { label: conn.weight || "", id: "label", cssClass: "connection-label" }]
+                        ],
                     });
                 });
+                isDirected = savedIsDirected;
+                document.getElementById('directed-toggle').textContent = isDirected ? 'Undirected Edges' : 'Directed Edges';
+                if (!isDirected) {
+                    toggleDirected();
+                }
                 alert('Graph loaded successfully!');
             } else {
                 alert('No saved graph found!');
