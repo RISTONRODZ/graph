@@ -6,8 +6,9 @@
     <title>Advanced Graph Visualizer</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jsPlumb/2.15.6/js/jsplumb.min.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
     <style>
-        .node {
+         .node {
             width: 40px;
             height: 40px;
             border-radius: 50%;
@@ -86,9 +87,14 @@
 
         jsPlumbInstance.setContainer(graphContainer);
 
-        const colors = ['#3498db', '#e74c3c', '#2ecc71', '#f39c12', '#9b59b6', '#1abc9c', '#34495e', '#e67e22'];
         let colorIndex = 0;
         let isDirected = false;
+        let scale = 1;
+        let panning = false;
+        let start = { x: 0, y: 0 };
+        let translate = { x: 0, y: 0 };
+        let undoStack = [];
+        let redoStack = [];
 
         function addNode() {
             const nodeName = nodeInput.value.trim();
@@ -97,7 +103,7 @@
                 node.id = nodeName;
                 node.className = 'node text-white font-bold';
                 node.textContent = nodeName;
-                node.style.backgroundColor = colors[colorIndex % colors.length];
+                node.style.backgroundColor = document.getElementById('node-color').value;
                 node.style.left = Math.random() * (graphContainer.clientWidth - 40) + 'px';
                 node.style.top = Math.random() * (graphContainer.clientHeight - 40) + 'px';
                 
@@ -122,6 +128,7 @@
                 nodeInput.value = '';
                 errorMessage.textContent = '';
                 colorIndex++;
+                saveState();
             } else if (document.getElementById(nodeName)) {
                 errorMessage.textContent = `Node "${nodeName}" already exists.`;
             } else {
@@ -154,6 +161,7 @@
                     });
                     edgeInput.value = '';
                     errorMessage.textContent = '';
+                    saveState();
                 }
             } else {
                 errorMessage.textContent = 'Please enter both source and target nodes.';
@@ -164,6 +172,7 @@
             const node = document.getElementById(nodeId);
             if (node) {
                 jsPlumbInstance.remove(node);
+                saveState();
             }
         }
 
@@ -178,6 +187,7 @@
                 }
             });
             document.getElementById('directed-toggle').textContent = isDirected ? 'Undirected Edges' : 'Directed Edges';
+            saveState();
         }
 
         function runDFS() {
@@ -212,6 +222,7 @@
             errorMessage.textContent = '';
             dfsResult.textContent = '';
             colorIndex = 0;
+            saveState();
         }
 
         function saveGraph() {
@@ -283,10 +294,192 @@
                     toggleDirected();
                 }
                 alert('Graph loaded successfully!');
+                saveState();
             } else {
                 alert('No saved graph found!');
             }
         }
+
+        function exportAsImage() {
+            html2canvas(graphContainer).then(canvas => {
+                const image = canvas.toDataURL("image/png").replace("image/png", "image/octet-stream");
+                const link = document.createElement('a');
+                link.download = 'graph.png';
+                link.href = image;
+                link.click();
+            });
+        }
+
+        function runShortestPath() {
+            const start = document.getElementById('shortest-path-start').value.trim();
+            const end = document.getElementById('shortest-path-end').value.trim();
+
+            if (!start || !end || !document.getElementById(start) || !document.getElementById(end)) {
+                errorMessage.textContent = 'Please enter valid start and end nodes for shortest path.';
+                return;
+            }
+
+            const graph = {};
+            jsPlumbInstance.getAllConnections().forEach(conn => {
+                const source = conn.source.id;
+                const target = conn.target.id;
+                const weight = parseFloat(conn.getOverlay("label").getLabel()) || 1;
+
+                if (!graph[source]) graph[source] = {};
+                if (!graph[target]) graph[target] = {};
+
+                graph[source][target] = weight;
+                if (!isDirected) {
+                    graph[target][source] = weight;
+                }
+            });
+
+            const distances = {};
+            const previous = {};
+            const nodes = new Set(Object.keys(graph));
+
+            nodes.forEach(node => {
+                distances[node] = Infinity;
+                previous[node] = null;
+            });
+            distances[start] = 0;
+
+            while (nodes.size > 0) {
+                const closest = Array.from(nodes).reduce((min, node) => 
+                    distances[node] < distances[min] ? node : min
+                );
+
+                nodes.delete(closest);
+
+                if (closest === end) break;
+
+                Object.keys(graph[closest]).forEach(neighbor => {
+                    const alt = distances[closest] + graph[closest][neighbor];
+                    if (alt < distances[neighbor]) {
+                        distances[neighbor] = alt;
+                        previous[neighbor] = closest;
+                    }
+                });
+            }
+
+            const path = [];
+            let current = end;
+            while (current) {
+                path.unshift(current);
+                current = previous[current];
+            }
+
+            if (path[0] !== start) {
+                errorMessage.textContent = 'No path found between the given nodes.';
+            } else {
+                dfsResult.textContent = `Shortest Path: ${path.join(' -> ')} (Distance: ${distances[end]})`;
+                highlightPath(path);
+            }
+        }
+
+        function highlightPath(path) {
+            jsPlumbInstance.getAllConnections().forEach(conn => {
+                conn.setPaintStyle({ stroke: "#5c6bc0", strokeWidth: 2 });
+            });
+
+            for (let i = 0; i < path.length - 1; i++) {
+                const conn = jsPlumbInstance.getConnections({
+                    source: path[i],
+                    target: path[i + 1]
+                })[0];
+                if (conn) {
+                    conn.setPaintStyle({ stroke: "#ff6d00", strokeWidth: 4 });
+                }
+            }
+        }
+
+        function saveState() {
+            const state = {
+                nodes: Array.from(graphContainer.querySelectorAll('.node')).map(node => ({
+                    id: node.id,
+                    left: node.style.left,
+                    top: node.style.top,
+                    color: node.style.backgroundColor
+                })),
+                connections: jsPlumbInstance.getAllConnections().map(conn => ({
+                    source: conn.source.id,
+                    target: conn.target.id,
+                    weight: conn.getOverlay("label").getLabel()
+                })),
+                isDirected
+            };
+            undoStack.push(JSON.stringify(state));
+            redoStack = [];
+        }
+
+        function undo() {
+            if (undoStack.length > 1) {
+                redoStack.push(undoStack.pop());
+                const previousState = JSON.parse(undoStack[undoStack.length - 1]);
+                loadState(previousState);
+            }
+        }
+
+        function redo() {
+            if (redoStack.length > 0) {
+                const nextState = JSON.parse(redoStack.pop());
+                undoStack.push(JSON.stringify(nextState));
+                loadState(nextState);
+            }
+        }
+
+        function loadState(state) {
+            clearGraph();
+            state.nodes.forEach(node => {
+                const newNode = document.createElement('div');
+                newNode.id = node.id;
+                newNode.className = 'node text-white font-bold';
+                newNode.textContent = node.id;
+                newNode.style.backgroundColor = node.color;
+                newNode.style.left = node.left;
+                newNode.style.top = node.top;
+
+                const deleteBtn = document.createElement('div');
+                deleteBtn.className = 'delete-node';
+                deleteBtn.textContent = 'x';
+                deleteBtn.onclick = () => deleteNode(node.id);
+                newNode.appendChild(deleteBtn);
+
+                graphContainer.appendChild(newNode);
+
+                jsPlumbInstance.draggable(newNode);
+                jsPlumbInstance.makeSource(newNode, {
+                    connectorStyle: { stroke: "#5c6bc0", strokeWidth: 2 },
+                    connectionType: "basic",
+                    anchor: "Continuous"
+                });
+                jsPlumbInstance.makeTarget(newNode, {
+                    anchor: "Continuous"
+                });
+            });
+            state.connections.forEach(conn => {
+                jsPlumbInstance.connect({
+                    source: document.getElementById(conn.source),
+                    target: document.getElementById(conn.target),
+                    type: "basic",
+                    paintStyle: { stroke: "#5c6bc0", strokeWidth: 2 },
+                    endpointStyle: { fill: "#5c6bc0", outlineStroke: "transparent", outlineWidth: 0 },
+                    hoverPaintStyle: { stroke: "#ff6d00", strokeWidth: 3 },
+                    overlays: [
+                        ["Arrow", { width: 12, length: 12, location: 1 }],
+                        ["Label", { label: conn.weight || "", id: "label", cssClass: "connection-label" }]
+                    ],
+                });
+            });
+            isDirected = state.isDirected;
+            document.getElementById('directed-toggle').textContent = isDirected ? 'Undirected Edges' : 'Directed Edges';
+            if (!isDirected) {
+                toggleDirected();
+            }
+        }
+
+        
+        saveState();
     </script>
 </body>
 </html>
